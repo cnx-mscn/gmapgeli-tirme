@@ -220,3 +220,45 @@ if ekip_ozetleri:
 else:
     st.info("Henüz karşılaştırılabilir ekip verisi yok.")
 
+import pandas as pd
+from fpdf import FPDF
+import base64
+from io import BytesIO
+
+st.markdown("## 📤 Çıktı Al")
+
+# Excel İndir
+if ekip_ozetleri:
+    df = pd.DataFrame(ekip_ozetleri)
+
+    # Excel
+    excel_buffer = BytesIO()
+    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name="Ekip Özeti")
+    excel_data = excel_buffer.getvalue()
+
+    b64_excel = base64.b64encode(excel_data).decode()
+    href_excel = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64_excel}" download="ekip_ozeti.xlsx">📥 Excel Olarak İndir</a>'
+    st.markdown(href_excel, unsafe_allow_html=True)
+
+    # PDF
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt="Ekip Özeti", ln=True, align="C")
+    pdf.ln(10)
+
+    for row in ekip_ozetleri:
+        for key, val in row.items():
+            pdf.cell(200, 10, txt=f"{key}: {val}", ln=True)
+        pdf.ln(5)
+
+    pdf_buffer = BytesIO()
+    pdf.output(pdf_buffer)
+    pdf_data = pdf_buffer.getvalue()
+
+    b64_pdf = base64.b64encode(pdf_data).decode()
+    href_pdf = f'<a href="data:application/pdf;base64,{b64_pdf}" download="ekip_ozeti.pdf">📥 PDF Olarak İndir</a>'
+    st.markdown(href_pdf, unsafe_allow_html=True)
+
+
