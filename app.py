@@ -154,3 +154,69 @@ if st.session_state.baslangic_konum and st.session_state.aktif_ekip:
 
 else:
     st.info("Lütfen başlangıç adresi ve bir ekip oluşturup şehir girin.")
+    # ================================
+# 🔍 Tüm Ekip Karşılaştırma Tablosu
+# ================================
+st.markdown("---")
+st.header("📋 Tüm Ekiplerin Karşılaştırması")
+
+ekip_ozetleri = []
+
+for ekip_adi, sehirler_liste in st.session_state.sehirler.items():
+    if not sehirler_liste or not st.session_state.baslangic_konum:
+        continue
+
+    baslangic = st.session_state.baslangic_konum
+    sehirler = sehirler_liste.copy()
+
+    # Aynı sıralama algoritması
+    if siralama_tipi == "Önem Derecesi":
+        sehirler.sort(key=lambda x: x["onem"], reverse=True)
+    else:
+        rota = []
+        current = baslangic
+        while sehirler:
+            en_yakin = min(sehirler, key=lambda x: haversine((current["lat"], current["lng"]), (x["konum"]["lat"], x["konum"]["lng"])) )
+            rota.append(en_yakin)
+            current = en_yakin["konum"]
+            sehirler.remove(en_yakin)
+        sehirler = rota
+
+    toplam_km = 0
+    toplam_sure = 0
+    toplam_iscilik = 0
+    toplam_yakit = 0
+
+    konumlar = [baslangic] + [s["konum"] for s in sehirler]
+    for i in range(len(konumlar) - 1):
+        yol = gmaps.directions(
+            (konumlar[i]["lat"], konumlar[i]["lng"]),
+            (konumlar[i + 1]["lat"], konumlar[i + 1]["lng"]),
+            mode="driving"
+        )
+        if yol:
+            km = yol[0]["legs"][0]["distance"]["value"] / 1000
+            sure_dk = yol[0]["legs"][0]["duration"]["value"] / 60
+            toplam_km += km
+            toplam_sure += sure_dk
+            yakit_maliyeti = km * km_basi_tuketim * benzin_fiyati
+            toplam_yakit += yakit_maliyeti
+            montaj_suresi = sehirler[i]["is_suresi"]
+            toplam_iscilik += montaj_suresi * SAATLIK_ISCILIK
+
+    toplam_maliyet = toplam_yakit + toplam_iscilik
+    ekip_ozetleri.append({
+        "Ekip": ekip_adi,
+        "Toplam KM": round(toplam_km, 1),
+        "Toplam Süre (saat)": round(toplam_sure / 60, 1),
+        "Yakıt Maliyeti (TL)": round(toplam_yakit),
+        "İşçilik Maliyeti (TL)": round(toplam_iscilik),
+        "Toplam Maliyet (TL)": round(toplam_maliyet)
+    })
+
+# Tablo Göster
+if ekip_ozetleri:
+    st.dataframe(ekip_ozetleri, use_container_width=True)
+else:
+    st.info("Henüz karşılaştırılabilir ekip verisi yok.")
+
