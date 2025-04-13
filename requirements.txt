@@ -5,4 +5,5 @@ folium
 streamlit-folium
 googlemaps
 haversine
+pip install pandas openpyxl fpdf
 
