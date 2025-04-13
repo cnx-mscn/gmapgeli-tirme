@@ -6,5 +6,6 @@ streamlit-folium
 googlemaps
 haversine
 fpdf
+openpyxl
 
 
