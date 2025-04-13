@@ -7,7 +7,6 @@ from haversine import haversine
 from fpdf import FPDF
 import base64
 from io import BytesIO
-import pandas as pd
 
 # Google Maps API Anahtarınızı girin
 gmaps = googlemaps.Client(key="AIzaSyDwQVuPcON3rGSibcBrwhxQvz4HLTpF9Ws")
@@ -20,6 +19,39 @@ SAATLIK_ISCILIK = st.sidebar.number_input("Saatlik İşçilik Ücreti (TL)", min
 benzin_fiyati = st.sidebar.number_input("Benzin Fiyatı (TL/L)", min_value=0.1, value=10.0, step=0.1)
 km_basi_tuketim = st.sidebar.number_input("Km Başına Tüketim (L/km)", min_value=0.01, value=0.1, step=0.01)
 siralama_tipi = st.sidebar.radio("Rota Sıralama Tipi", ["Önem Derecesi", "En Kısa Rota"])
+
+# Font dosyasının yolu
+font_path = 'fonts/DejaVuSans.ttf'  # Fontu buraya yerleştirin
+
+# PDF oluşturma fonksiyonu
+def create_pdf(toplam_km, toplam_sure_td, toplam_yakit, toplam_iscilik, toplam_maliyet):
+    pdf = FPDF()
+    pdf.add_page()
+
+    # DejaVu fontunu yükleyelim, Unicode desteği sağlıyoruz
+    pdf.add_font('DejaVu', '', font_path, uni=True)
+    pdf.set_font('DejaVu', '', 12)
+
+    # PDF içeriği
+    pdf.cell(200, 10, txt=f"Toplam Mesafe: {round(toplam_km, 1)} km", ln=True)
+    pdf.cell(200, 10, txt=f"Toplam Süre: {toplam_sure_td}", ln=True)
+    pdf.cell(200, 10, txt=f"Yakıt Maliyeti: {round(toplam_yakit)} TL", ln=True)
+    pdf.cell(200, 10, txt=f"İşçilik Maliyeti: {round(toplam_iscilik)} TL", ln=True)
+    pdf.cell(200, 10, txt=f"Toplam Maliyet: {round(toplam_maliyet)} TL", ln=True)
+
+    # PDF'yi belleğe yaz
+    pdf_buffer = BytesIO()
+    pdf.output(pdf_buffer)
+
+    # PDF'yi base64 formatında encode et
+    pdf_base64 = base64.b64encode(pdf_buffer.getvalue()).decode("utf-8")
+    pdf_url = f"data:application/pdf;base64,{pdf_base64}"
+
+    return pdf_url
+
+# Kullanıcıya PDF indir linki sunma
+def display_pdf_link(pdf_url):
+    st.markdown(f'<a href="{pdf_url}" download="montaj_raporu.pdf">PDF olarak indir</a>', unsafe_allow_html=True)
 
 # Session Init
 if "ekipler" not in st.session_state:
@@ -55,15 +87,6 @@ if not st.session_state.baslangic_konum:
                 st.sidebar.error("Adres bulunamadı.")
         except:
             st.sidebar.error("API Hatası.")
-
-# Üye Ekle
-with st.sidebar.expander("👤 Ekip Üyeleri"):
-    uye_adi = st.text_input("Yeni Üye Adı")
-    if st.button("✅ Üye Ekle") and uye_adi:
-        st.session_state.ekipler[st.session_state.aktif_ekip]["members"].append(uye_adi)
-
-    for i, uye in enumerate(st.session_state.ekipler[st.session_state.aktif_ekip]["members"]):
-        st.markdown(f"- {uye}")
 
 # Şehir/Bayi Ekleme
 st.subheader("📌 Şehir Ekle")
@@ -123,48 +146,21 @@ if st.session_state.baslangic_konum and st.session_state.sehirler:
             km = yol[0]["legs"][0]["distance"]["value"] / 1000  # km olarak mesafe
             sure_dk = yol[0]["legs"][0]["duration"]["value"] / 60  # dakika cinsinden süre
             toplam_km += km
-            toplam_sure += sure_dk
+            toplam_sure += sure_dk / 60  # saat cinsinden
             yakit_maliyeti = km * km_basi_tuketim * benzin_fiyati
             toplam_yakit += yakit_maliyeti
-            montaj_suresi = st.session_state.sehirler[i]["is_suresi"]
-            toplam_iscilik += montaj_suresi * SAATLIK_ISCILIK
-            toplam_maliyet += yakit_maliyeti + (montaj_suresi * SAATLIK_ISCILIK)
+            iscilik_maliyeti = sure_dk * SAATLIK_ISCILIK
+            toplam_iscilik += iscilik_maliyeti
+            toplam_maliyet += yakit_maliyeti + iscilik_maliyeti
 
-            folium.Marker(
-                location=[konumlar[i + 1]["lat"], konumlar[i + 1]["lng"]],
-                popup=f"{i+1}. {st.session_state.sehirler[i]['sehir']}<br>İşçilik: {round(montaj_suresi * SAATLIK_ISCILIK, 2)} TL<br>Yakıt: {round(yakit_maliyeti, 2)} TL",
-                tooltip=f"{round(km)} km, {round(sure_dk)} dk"
-            ).add_to(harita)
+            folium.Marker([konumlar[i]["lat"], konumlar[i]["lng"]]).add_to(harita)
+            folium.Marker([konumlar[i + 1]["lat"], konumlar[i + 1]["lng"]]).add_to(harita)
+            folium.PolyLine([(konumlar[i]["lat"], konumlar[i]["lng"]), (konumlar[i + 1]["lat"], konumlar[i + 1]["lng"])], color="blue").add_to(harita)
 
-    toplam_sure_td = timedelta(minutes=toplam_sure)
+    # Rapor PDF
+    toplam_sure_td = str(timedelta(hours=toplam_sure))
+    pdf_url = create_pdf(toplam_km, toplam_sure_td, toplam_yakit, toplam_iscilik, toplam_maliyet)
+    display_pdf_link(pdf_url)
 
-    # Rota Haritası
-    st.subheader("🗺️ Rota Haritası")
-    st_folium(harita, width=1000, height=600)
-
-    # PDF Raporu Oluşturma
-    pdf = FPDF()
-    pdf.add_page()
-
-    # Türkçe karakter destekli font
-    pdf.add_font('DejaVu', '', 'DejaVuSans.ttf', uni=True)
-    pdf.set_font('DejaVu', '', 12)
-
-    # PDF İçeriği
-    pdf.cell(200, 10, txt=f"Toplam Mesafe: {round(toplam_km, 1)} km", ln=True)
-    pdf.cell(200, 10, txt=f"Toplam Süre: {toplam_sure_td}", ln=True)
-    pdf.cell(200, 10, txt=f"Yakıt Maliyeti: {round(toplam_yakit)} TL", ln=True)
-    pdf.cell(200, 10, txt=f"İşçilik Maliyeti: {round(toplam_iscilik)} TL", ln=True)
-    pdf.cell(200, 10, txt=f"Toplam Maliyet: {round(toplam_maliyet)} TL", ln=True)
-
-    # PDF Çıktısı
-    pdf_buffer = BytesIO()
-    pdf.output(pdf_buffer)
-
-    # PDF'yi kullanıcıya sunma
-    pdf_base64 = base64.b64encode(pdf_buffer.getvalue()).decode("utf-8")
-    pdf_url = f"data:application/pdf;base64,{pdf_base64}"
-    st.markdown(f'<a href="{pdf_url}" download="montaj_raporu.pdf">PDF olarak indir</a>', unsafe_allow_html=True)
-
-else:
-    st.info("Lütfen başlangıç adresi ve en az 1 şehir giriniz.")
+    # Harita Gösterimi
+    st_folium(harita, width=700)
