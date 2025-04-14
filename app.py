@@ -14,7 +14,7 @@ from openpyxl import load_workbook
 
 # Google Maps API Anahtarı
 API_KEY = "AIzaSyDwQVuPcON3rGSibcBrwhxQvz4HLTpF9Ws"
-gmaps = googlemaps.Client(key=AIzaSyDwQVuPcON3rGSibcBrwhxQvz4HLTpF9Ws)
+gmaps = googlemaps.Client(key=API_KEY)
 
 # Sayfa konfigürasyonu
 st.set_page_config("Montaj Rota Planlayıcı", layout="wide")
