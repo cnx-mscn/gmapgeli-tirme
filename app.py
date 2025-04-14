@@ -2,7 +2,11 @@ import streamlit as st
 import googlemaps
 import folium
 from streamlit_folium import st_folium
+from datetime import timedelta
 from haversine import haversine
+from fpdf import FPDF
+import base64
+from io import BytesIO
 import pandas as pd
 import io
 
@@ -19,6 +23,33 @@ SAATLIK_ISCILIK = st.sidebar.number_input("Saatlik İşçilik Ücreti (TL)", min
 benzin_fiyati = st.sidebar.number_input("Benzin Fiyatı (TL/L)", min_value=0.1, value=10.0, step=0.1)
 km_basi_tuketim = st.sidebar.number_input("Km Başına Tüketim (L/km)", min_value=0.01, value=0.1, step=0.01)
 siralama_tipi = st.sidebar.radio("Rota Sıralama Tipi", ["Önem Derecesi", "En Kısa Rota"])
+
+# PDF oluşturma fonksiyonu
+def create_pdf(toplam_km, toplam_sure_td, toplam_yakit, toplam_iscilik, toplam_maliyet):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font('Arial', '', 12)
+
+    # PDF içeriği
+    pdf.cell(200, 10, txt=f"Toplam Mesafe: {round(toplam_km, 1)} km", ln=True)
+    pdf.cell(200, 10, txt=f"Toplam Süre: {toplam_sure_td}", ln=True)
+    pdf.cell(200, 10, txt=f"Yakıt Maliyeti: {round(toplam_yakit)} TL", ln=True)
+    pdf.cell(200, 10, txt=f"İşçilik Maliyeti: {round(toplam_iscilik)} TL", ln=True)
+    pdf.cell(200, 10, txt=f"Toplam Maliyet: {round(toplam_maliyet)} TL", ln=True)
+
+    # PDF'yi belleğe yaz
+    pdf_buffer = BytesIO()
+    pdf.output(pdf_buffer)
+
+    # PDF'yi base64 formatında encode et
+    pdf_base64 = base64.b64encode(pdf_buffer.getvalue()).decode("utf-8")
+    pdf_url = f"data:application/pdf;base64,{pdf_base64}"
+
+    return pdf_url
+
+# Kullanıcıya PDF indir linki sunma
+def display_pdf_link(pdf_url):
+    st.markdown(f'<a href="{pdf_url}" download="montaj_raporu.pdf">PDF olarak indir</a>', unsafe_allow_html=True)
 
 # Session Init
 if "ekipler" not in st.session_state:
@@ -39,6 +70,16 @@ if st.sidebar.button("➕ Ekip Oluştur") and ekip_adi:
         st.session_state.aktif_ekip = ekip_adi
 aktif_secim = st.sidebar.selectbox("Aktif Ekip Seç", list(st.session_state.ekipler.keys()))
 st.session_state.aktif_ekip = aktif_secim
+
+# Ekip Üyeleri
+st.sidebar.subheader("Ekip Üyeleri")
+for ekip, details in st.session_state.ekipler.items():
+    if ekip == st.session_state.aktif_ekip:
+        new_member = st.sidebar.text_input(f"{ekip} için yeni üye ekleyin", key=f"new_member_{ekip}")
+        if st.sidebar.button(f"➕ {ekip} Üyesi Ekle"):
+            if new_member:
+                details["members"].append(new_member)
+                st.sidebar.success(f"{new_member} {ekip} ekibine eklendi.")
 
 # Başlangıç Adresi Girişi
 st.sidebar.subheader("📍 Başlangıç Noktası")
@@ -78,59 +119,73 @@ with st.form("sehir_form"):
         else:
             st.error("Konum bulunamadı.")
 
-# Harita oluşturma ve rota hesaplama
-def calculate_route(city_data, baslangic_konum, rotasi_tipi):
-    """ Rota hesaplaması (en kısa veya önemliye göre sıralama) """
-    # Rota oluşturulacak şehirlerin listesi
-    city_coords = [(sehir["sehir"], sehir["konum"]) for sehir in city_data]
-    
-    # En kısa yol için koordinatlar
-    route = [baslangic_konum] + [sehir["konum"] for sehir in city_data]
-    
-    # Rota sıralama (önem sırasına göre veya en kısa rota)
-    if rotasi_tipi == "En Kısa Rota":
-        # Google Maps API ile rotayı hesapla
-        result = gmaps.directions(baslangic_konum, route[-1], waypoints=[sehir["konum"] for sehir in city_data], mode="driving")
-        if result:
-            route = result[0]['legs'][0]['steps']
-    
-    elif rotasi_tipi == "Önem Derecesi":
-        # Önem derecesine göre sıralama
-        city_data.sort(key=lambda x: x['onem'], reverse=True)
-        route = [baslangic_konum] + [sehir["konum"] for sehir in city_data]
+# Harita oluşturma
+st.subheader("🗺️ Aktif Ekiplerin Haritası")
 
-    return route, city_data
-
-# Rota hesapla ve harita oluştur
+# Başlangıç noktasını haritada ekleyin
 if st.session_state.baslangic_konum:
     baslangic_konum = st.session_state.baslangic_konum
-    # Aktif ekip için şehirleri al
-    aktif_ekip = st.session_state.aktif_ekip
-    visited_cities = st.session_state.ekipler[aktif_ekip]["visited_cities"]
-
-    # Rota hesapla (en kısa veya önemliye göre)
-    route, ordered_cities = calculate_route(visited_cities, baslangic_konum, siralama_tipi)
-    
-    # Harita oluştur
     harita = folium.Map(location=[baslangic_konum["lat"], baslangic_konum["lng"]], zoom_start=6)
-
-    # Başlangıç noktası ekle
     folium.Marker(
         [baslangic_konum["lat"], baslangic_konum["lng"]],
         popup="Başlangıç Konumu",
         icon=folium.Icon(color="blue", icon="info-sign"),
     ).add_to(harita)
 
-    # Aktif ekip için şehirleri haritada numaralandırarak göster
-    for idx, sehir in enumerate(ordered_cities):
-        sehir_konum = sehir["konum"]
-        folium.Marker(
-            [sehir_konum["lat"], sehir_konum["lng"]],
-            popup=f"{idx+1}. {sehir['sehir']} (Önem: {sehir['onem']})",
-            icon=folium.Icon(color="green", icon="cloud"),
-        ).add_to(harita)
-    
-    # Haritayı Streamlit üzerinden göster
+    # Aktif ekip için şehirleri haritada gösterin
+    for ekip, details in st.session_state.ekipler.items():
+        if ekip == st.session_state.aktif_ekip:
+            for sehir in details["visited_cities"]:
+                sehir_konum = sehir["konum"]
+                folium.Marker(
+                    [sehir_konum["lat"], sehir_konum["lng"]],
+                    popup=f"{sehir['sehir']} (Önem: {sehir['onem']})",
+                    icon=folium.Icon(color="green", icon="cloud"),
+                ).add_to(harita)
+
+    # Haritayı Streamlit üzerinden gösterin
     st_folium(harita, width=700)
 else:
     st.warning("Başlangıç noktasını girin ve onaylayın.")
+
+# Excel raporu oluşturma
+def generate_excel():
+    data = []
+    for ekip, details in st.session_state.ekipler.items():
+        for sehir in details["visited_cities"]:
+            # İşçilik maliyeti ve yol masrafını hesapla
+            yol_masrafi = haversine(
+                (st.session_state.baslangic_konum["lat"], st.session_state.baslangic_konum["lng"]),
+                (sehir["konum"]["lat"], sehir["konum"]["lng"])
+            ) * km_basi_tuketim * benzin_fiyati
+            iscik_maliyet = sehir["is_suresi"] * SAATLIK_ISCILIK
+            toplam_maliyet = yol_masrafi + iscik_maliyet
+
+            row = {
+                "Ekip Adı": ekip,
+                "Şehir": sehir["sehir"],
+                "Montaj Süresi (saat)": sehir["is_suresi"],
+                "Önem Derecesi": sehir["onem"],
+                "İşçilik Maliyeti (TL)": round(iscik_maliyet, 2),
+                "Yol Masrafı (TL)": round(yol_masrafi, 2),
+                "Toplam Maliyet (TL)": round(toplam_maliyet, 2),
+                "Ekip Üyeleri": ", ".join(details["members"]),
+            }
+            data.append(row)
+
+    df = pd.DataFrame(data)
+
+    # Excel dosyasını belleğe kaydetme
+    excel_buffer = io.BytesIO()
+    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name="Montaj Planı")
+    excel_buffer.seek(0)
+    return excel_buffer
+
+# Excel dosyasını dışa aktar
+st.download_button(
+    label="Excel Olarak İndir",
+    data=generate_excel(),
+    file_name="montaj_plani.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+)
