@@ -109,6 +109,34 @@ with st.form("sehir_form"):
         else:
             st.error("Konum bulunamadı.")
 
+# Harita oluşturma
+st.subheader("🗺️ Şehirlerin Haritada Gösterilmesi")
+
+# Başlangıç noktasını haritada ekleyin
+if st.session_state.baslangic_konum:
+    baslangic_konum = st.session_state.baslangic_konum
+    harita = folium.Map(location=[baslangic_konum["lat"], baslangic_konum["lng"]], zoom_start=6)
+    folium.Marker(
+        [baslangic_konum["lat"], baslangic_konum["lng"]],
+        popup="Başlangıç Konumu",
+        icon=folium.Icon(color="blue", icon="info-sign"),
+    ).add_to(harita)
+
+    # Her ekip için şehirleri haritada gösterin
+    for ekip, details in st.session_state.ekipler.items():
+        for sehir in details["visited_cities"]:
+            sehir_konum = sehir["konum"]
+            folium.Marker(
+                [sehir_konum["lat"], sehir_konum["lng"]],
+                popup=f"{sehir['sehir']} (Önem: {sehir['onem']})",
+                icon=folium.Icon(color="green", icon="cloud"),
+            ).add_to(harita)
+
+    # Haritayı Streamlit üzerinden gösterin
+    st_folium(harita, width=700)
+else:
+    st.warning("Başlangıç noktasını girin ve onaylayın.")
+
 # Excel raporu oluşturma
 def generate_excel():
     data = []
