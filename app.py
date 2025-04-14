@@ -63,15 +63,45 @@ if "sehirler" not in st.session_state:
 if "baslangic_konum" not in st.session_state:
     st.session_state.baslangic_konum = None
 
-# Ekip Yönetimi
-st.sidebar.subheader("👷 Ekip Yönetimi")
-ekip_adi = st.sidebar.text_input("Yeni Ekip Adı")
-if st.sidebar.button("➕ Ekip Oluştur") and ekip_adi:
-    if ekip_adi not in st.session_state.ekipler:
-        st.session_state.ekipler[ekip_adi] = {"members": []}
-        st.session_state.aktif_ekip = ekip_adi
-aktif_secim = st.sidebar.selectbox("Aktif Ekip Seç", list(st.session_state.ekipler.keys()))
-st.session_state.aktif_ekip = aktif_secim
+st.subheader("🔧 Ekip Oluşturma")
+
+if "ekipler" not in st.session_state:
+    st.session_state.ekipler = {}  # {"Ekip A": ["Ali", "Veli"]}
+
+ekip_adi = st.text_input("Yeni Ekip Adı Girin")
+if st.button("➕ Ekip Oluştur"):
+    if ekip_adi and ekip_adi not in st.session_state.ekipler:
+        st.session_state.ekipler[ekip_adi] = []
+        st.success(f"'{ekip_adi}' adlı ekip oluşturuldu.")
+    elif ekip_adi in st.session_state.ekipler:
+        st.warning("Bu ekip zaten var.")
+    else:
+        st.error("Ekip adı boş olamaz.")
+
+st.markdown("---")
+
+# Ekip listesi
+for ekip, uyeler in st.session_state.ekipler.items():
+    with st.expander(f"👥 {ekip} - {len(uyeler)} üye"):
+        yeni_uye = st.text_input(f"{ekip} ekibine üye ekleyin", key=f"uye_{ekip}")
+        if st.button(f"➕ Ekle ({ekip})", key=f"ekle_{ekip}"):
+            if yeni_uye and yeni_uye not in uyeler:
+                uyeler.append(yeni_uye)
+                st.success(f"{yeni_uye} eklendi.")
+            elif yeni_uye in uyeler:
+                st.warning("Bu üye zaten var.")
+            else:
+                st.error("Üye adı boş olamaz.")
+
+        if uyeler:
+            silinecek = st.selectbox("Üye sil", options=uyeler, key=f"sil_{ekip}")
+            if st.button(f"🗑️ Sil ({ekip})", key=f"sil_btn_{ekip}"):
+                uyeler.remove(silinecek)
+                st.success(f"{silinecek} silindi.")
+
+        st.write("📋 Üye Listesi:")
+        st.write(uyeler)
+
 
 # Başlangıç Adresi Girişi
 st.sidebar.subheader("📍 Başlangıç Noktası")
