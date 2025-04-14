@@ -80,27 +80,53 @@ if st.button("➕ Ekip Oluştur"):
 
 st.markdown("---")
 
-# Ekip listesi
+import streamlit as st
+
+st.subheader("🔧 Ekip Oluşturma")
+
+# Ekip bilgilerini session'da tut
+if "ekipler" not in st.session_state:
+    st.session_state.ekipler = {}  # Örnek: {"Ekip A": ["Ali", "Veli"]}
+
+# Yeni ekip oluşturma alanı
+ekip_adi = st.text_input("Yeni Ekip Adı Girin")
+if st.button("➕ Ekip Oluştur"):
+    if ekip_adi and ekip_adi not in st.session_state.ekipler:
+        st.session_state.ekipler[ekip_adi] = []
+        st.success(f"✅ '{ekip_adi}' adlı ekip oluşturuldu.")
+    elif ekip_adi in st.session_state.ekipler:
+        st.warning("⚠️ Bu ekip zaten var.")
+    else:
+        st.error("❌ Ekip adı boş olamaz.")
+
+st.markdown("---")
+
+# Var olan ekipleri listele ve üye yönetimi
 for ekip, uyeler in st.session_state.ekipler.items():
     with st.expander(f"👥 {ekip} - {len(uyeler)} üye"):
+        
+        # Üye ekleme
         yeni_uye = st.text_input(f"{ekip} ekibine üye ekleyin", key=f"uye_{ekip}")
         if st.button(f"➕ Ekle ({ekip})", key=f"ekle_{ekip}"):
             if yeni_uye and yeni_uye not in uyeler:
                 uyeler.append(yeni_uye)
-                st.success(f"{yeni_uye} eklendi.")
+                st.success(f"✅ {yeni_uye} eklendi.")
             elif yeni_uye in uyeler:
-                st.warning("Bu üye zaten var.")
+                st.warning("⚠️ Bu üye zaten var.")
             else:
-                st.error("Üye adı boş olamaz.")
+                st.error("❌ Üye adı boş olamaz.")
 
+        # Üye silme
         if uyeler:
-            silinecek = st.selectbox("Üye sil", options=uyeler, key=f"sil_{ekip}")
+            silinecek = st.selectbox("🗑️ Silinecek üyeyi seçin", options=uyeler, key=f"sil_{ekip}")
             if st.button(f"🗑️ Sil ({ekip})", key=f"sil_btn_{ekip}"):
                 uyeler.remove(silinecek)
-                st.success(f"{silinecek} silindi.")
+                st.success(f"🧹 {silinecek} silindi.")
 
+        # Üye listesini göster
         st.write("📋 Üye Listesi:")
         st.write(uyeler)
+
 
 
 # Başlangıç Adresi Girişi
