@@ -7,6 +7,8 @@ from haversine import haversine
 from fpdf import FPDF
 import base64
 from io import BytesIO
+import pandas as pd
+import io
 
 # Google Maps API Anahtarınızı girin
 gmaps = googlemaps.Client(key="AIzaSyDwQVuPcON3rGSibcBrwhxQvz4HLTpF9Ws")
@@ -156,37 +158,34 @@ if st.session_state.baslangic_konum and st.session_state.sehirler:
             folium.Marker([konumlar[i]["lat"], konumlar[i]["lng"]]).add_to(harita)
             folium.Marker([konumlar[i + 1]["lat"], konumlar[i + 1]["lng"]]).add_to(harita)
             folium.PolyLine([(konumlar[i]["lat"], konumlar[i]["lng"]), (konumlar[i + 1]["lat"], konumlar[i + 1]["lng"])], color="blue").add_to(harita)
-            import io
 
-# Excel raporu oluşturma
-def generate_excel():
-    data = []
-    for sehir in st.session_state.sehirler:
-        row = {
-            "Şehir": sehir["sehir"],
-            "Montaj Süresi (saat)": sehir["is_suresi"],
-            "Önem Derecesi": sehir["onem"],
-            "Montaj Tarihi": job_dates.get(sehir["sehir"], "N/A"),
-        }
-        data.append(row)
+    # Excel raporu oluşturma
+    def generate_excel():
+        data = []
+        for sehir in st.session_state.sehirler:
+            row = {
+                "Şehir": sehir["sehir"],
+                "Montaj Süresi (saat)": sehir["is_suresi"],
+                "Önem Derecesi": sehir["onem"],
+            }
+            data.append(row)
 
-    df = pd.DataFrame(data)
+        df = pd.DataFrame(data)
 
-    # Excel dosyasını belleğe kaydetme
-    excel_buffer = io.BytesIO()
-    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name="Montaj Planı")
-    excel_buffer.seek(0)
-    return excel_buffer
+        # Excel dosyasını belleğe kaydetme
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name="Montaj Planı")
+        excel_buffer.seek(0)
+        return excel_buffer
 
-# Excel dosyasını dışa aktar
-st.download_button(
-    label="Excel Olarak İndir",
-    data=generate_excel(),
-    file_name="montaj_plani.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-)
-
+    # Excel dosyasını dışa aktar
+    st.download_button(
+        label="Excel Olarak İndir",
+        data=generate_excel(),
+        file_name="montaj_plani.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
     # Rapor PDF
     toplam_sure_td = str(timedelta(hours=toplam_sure))
