@@ -211,11 +211,16 @@ def generate_excel():
             }
             data.append(row)
     df = pd.DataFrame(data)
-    excel_buffer = io.BytesIO()
-    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name="Montaj Planı")
-    excel_buffer.seek(0)
-    return excel_buffer
+   with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+    df.to_excel(writer, index=False, sheet_name="Montaj Planı")
+    worksheet = writer.sheets["Montaj Planı"]
+
+    # Sütun genişliklerini içeriğe göre ayarla
+    for column_cells in worksheet.columns:
+        max_length = max(len(str(cell.value)) if cell.value is not None else 0 for cell in column_cells)
+        adjusted_width = max_length + 2  # Biraz boşluk bırak
+        worksheet.column_dimensions[column_cells[0].column_letter].width = adjusted_width
+
 
 st.download_button(
     label="Excel Olarak İndir",
