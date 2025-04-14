@@ -88,44 +88,40 @@ st.subheader("🔧 Ekip Oluşturma")
 if "ekipler" not in st.session_state:
     st.session_state.ekipler = {}  # Örnek: {"Ekip A": ["Ali", "Veli"]}
 
-# Yeni ekip oluşturma alanı
-ekip_adi = st.text_input("Yeni Ekip Adı Girin")
-if st.button("➕ Ekip Oluştur"):
-    if ekip_adi and ekip_adi not in st.session_state.ekipler:
-        st.session_state.ekipler[ekip_adi] = []
-        st.success(f"✅ '{ekip_adi}' adlı ekip oluşturuldu.")
-    elif ekip_adi in st.session_state.ekipler:
-        st.warning("⚠️ Bu ekip zaten var.")
-    else:
-        st.error("❌ Ekip adı boş olamaz.")
+st.subheader("👥 Ekip Üyeleri Yönetimi")
 
-st.markdown("---")
+# Aktif ekip kontrolü
+aktif_ekip = st.session_state.get("aktif_ekip")
+if aktif_ekip and aktif_ekip in st.session_state.ekipler:
+    ekip_veri = st.session_state.ekipler[aktif_ekip]
+    uyeler = ekip_veri.get("members", [])
 
-# Var olan ekipleri listele ve üye yönetimi
-for ekip, uyeler in st.session_state.ekipler.items():
-    with st.expander(f"👥 {ekip} - {len(uyeler)} üye"):
-        
-        # Üye ekleme
-        yeni_uye = st.text_input(f"{ekip} ekibine üye ekleyin", key=f"uye_{ekip}")
-        if st.button(f"➕ Ekle ({ekip})", key=f"ekle_{ekip}"):
-            if yeni_uye and yeni_uye not in uyeler:
+    # Yeni üye ekleme
+    yeni_uye = st.text_input(f"'{aktif_ekip}' ekibine yeni üye ekleyin")
+    if st.button("➕ Üye Ekle"):
+        if yeni_uye:
+            if yeni_uye not in uyeler:
                 uyeler.append(yeni_uye)
-                st.success(f"✅ {yeni_uye} eklendi.")
-            elif yeni_uye in uyeler:
-                st.warning("⚠️ Bu üye zaten var.")
+                st.success(f"✅ '{yeni_uye}' eklendi.")
             else:
-                st.error("❌ Üye adı boş olamaz.")
+                st.warning("⚠️ Bu üye zaten mevcut.")
+        else:
+            st.error("❌ Üye adı boş olamaz.")
 
-        # Üye silme
-        if uyeler:
-            silinecek = st.selectbox("🗑️ Silinecek üyeyi seçin", options=uyeler, key=f"sil_{ekip}")
-            if st.button(f"🗑️ Sil ({ekip})", key=f"sil_btn_{ekip}"):
-                uyeler.remove(silinecek)
-                st.success(f"🧹 {silinecek} silindi.")
-
-        # Üye listesini göster
-        st.write("📋 Üye Listesi:")
+    # Mevcut üyeleri listele ve silme seçeneği
+    if uyeler:
+        st.write("📋 Mevcut Üyeler:")
         st.write(uyeler)
+
+        silinecek = st.selectbox("Üye Seç ve Sil", options=uyeler, key="uye_sil")
+        if st.button("🗑️ Üyeyi Sil"):
+            uyeler.remove(silinecek)
+            st.success(f"🗑️ '{silinecek}' silindi.")
+    else:
+        st.info("Bu ekipte henüz üye yok.")
+
+else:
+    st.warning("📌 Önce bir ekip oluşturun ve seçin.")
 
 
 
