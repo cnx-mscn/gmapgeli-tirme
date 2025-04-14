@@ -9,7 +9,7 @@ import base64
 from io import BytesIO
 
 # Google Maps API Anahtarınızı girin
-gmaps = googlemaps.Client(key="AIzaSyDwQVuPcON3rGSibcBrwhxQvz4HLTpF9Ws")
+gmaps = googlemaps.Client(key="YOUR_GOOGLE_MAPS_API_KEY")
 
 st.set_page_config("Montaj Rota Planlayıcı", layout="wide")
 st.title("🛠️ Montaj Rota Planlayıcı")
@@ -63,67 +63,15 @@ if "sehirler" not in st.session_state:
 if "baslangic_konum" not in st.session_state:
     st.session_state.baslangic_konum = None
 
-st.subheader("🔧 Ekip Oluşturma")
-
-if "ekipler" not in st.session_state:
-    st.session_state.ekipler = {}  # {"Ekip A": ["Ali", "Veli"]}
-
-ekip_adi = st.text_input("Yeni Ekip Adı Girin")
-if st.button("➕ Ekip Oluştur"):
-    if ekip_adi and ekip_adi not in st.session_state.ekipler:
-        st.session_state.ekipler[ekip_adi] = []
-        st.success(f"'{ekip_adi}' adlı ekip oluşturuldu.")
-    elif ekip_adi in st.session_state.ekipler:
-        st.warning("Bu ekip zaten var.")
-    else:
-        st.error("Ekip adı boş olamaz.")
-
-st.markdown("---")
-
-import streamlit as st
-
-st.subheader("🔧 Ekip Oluşturma")
-
-# Ekip bilgilerini session'da tut
-if "ekipler" not in st.session_state:
-    st.session_state.ekipler = {}  # Örnek: {"Ekip A": ["Ali", "Veli"]}
-
-st.subheader("👥 Ekip Üyeleri Yönetimi")
-
-# Aktif ekip kontrolü
-aktif_ekip = st.session_state.get("aktif_ekip")
-if aktif_ekip and aktif_ekip in st.session_state.ekipler:
-    ekip_veri = st.session_state.ekipler[aktif_ekip]
-    uyeler = ekip_veri.get("members", [])
-
-    # Yeni üye ekleme
-    yeni_uye = st.text_input(f"'{aktif_ekip}' ekibine yeni üye ekleyin")
-    if st.button("➕ Üye Ekle"):
-        if yeni_uye:
-            if yeni_uye not in uyeler:
-                uyeler.append(yeni_uye)
-                st.success(f"✅ '{yeni_uye}' eklendi.")
-            else:
-                st.warning("⚠️ Bu üye zaten mevcut.")
-        else:
-            st.error("❌ Üye adı boş olamaz.")
-
-    # Mevcut üyeleri listele ve silme seçeneği
-    if uyeler:
-        st.write("📋 Mevcut Üyeler:")
-        st.write(uyeler)
-
-        silinecek = st.selectbox("Üye Seç ve Sil", options=uyeler, key="uye_sil")
-        if st.button("🗑️ Üyeyi Sil"):
-            uyeler.remove(silinecek)
-            st.success(f"🗑️ '{silinecek}' silindi.")
-    else:
-        st.info("Bu ekipte henüz üye yok.")
-
-else:
-    st.warning("📌 Önce bir ekip oluşturun ve seçin.")
-
-
+# Ekip Yönetimi
+st.sidebar.subheader("👷 Ekip Yönetimi")
+ekip_adi = st.sidebar.text_input("Yeni Ekip Adı")
+if st.sidebar.button("➕ Ekip Oluştur") and ekip_adi:
+    if ekip_adi not in st.session_state.ekipler:
+        st.session_state.ekipler[ekip_adi] = {"members": []}
+        st.session_state.aktif_ekip = ekip_adi
+aktif_secim = st.sidebar.selectbox("Aktif Ekip Seç", list(st.session_state.ekipler.keys()))
+st.session_state.aktif_ekip = aktif_secim
 
 # Başlangıç Adresi Girişi
 st.sidebar.subheader("📍 Başlangıç Noktası")
