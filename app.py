@@ -9,7 +9,7 @@ import base64
 from io import BytesIO
 
 # Google Maps API Anahtarınızı girin
-gmaps = googlemaps.Client(key="YOUR_GOOGLE_MAPS_API_KEY")
+gmaps = googlemaps.Client(key="AIzaSyDwQVuPcON3rGSibcBrwhxQvz4HLTpF9Ws")
 
 st.set_page_config("Montaj Rota Planlayıcı", layout="wide")
 st.title("🛠️ Montaj Rota Planlayıcı")
