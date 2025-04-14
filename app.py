@@ -71,6 +71,16 @@ if st.sidebar.button("➕ Ekip Oluştur") and ekip_adi:
 aktif_secim = st.sidebar.selectbox("Aktif Ekip Seç", list(st.session_state.ekipler.keys()))
 st.session_state.aktif_ekip = aktif_secim
 
+# Ekip Üyeleri
+st.sidebar.subheader("Ekip Üyeleri")
+for ekip, details in st.session_state.ekipler.items():
+    if ekip == st.session_state.aktif_ekip:
+        new_member = st.sidebar.text_input(f"{ekip} için yeni üye ekleyin", key=f"new_member_{ekip}")
+        if st.sidebar.button(f"➕ {ekip} Üyesi Ekle"):
+            if new_member:
+                details["members"].append(new_member)
+                st.sidebar.success(f"{new_member} {ekip} ekibine eklendi.")
+
 # Başlangıç Adresi Girişi
 st.sidebar.subheader("📍 Başlangıç Noktası")
 if not st.session_state.baslangic_konum:
@@ -110,7 +120,7 @@ with st.form("sehir_form"):
             st.error("Konum bulunamadı.")
 
 # Harita oluşturma
-st.subheader("🗺️ Şehirlerin Haritada Gösterilmesi")
+st.subheader("🗺️ Aktif Ekiplerin Haritası")
 
 # Başlangıç noktasını haritada ekleyin
 if st.session_state.baslangic_konum:
@@ -122,15 +132,16 @@ if st.session_state.baslangic_konum:
         icon=folium.Icon(color="blue", icon="info-sign"),
     ).add_to(harita)
 
-    # Her ekip için şehirleri haritada gösterin
+    # Aktif ekip için şehirleri haritada gösterin
     for ekip, details in st.session_state.ekipler.items():
-        for sehir in details["visited_cities"]:
-            sehir_konum = sehir["konum"]
-            folium.Marker(
-                [sehir_konum["lat"], sehir_konum["lng"]],
-                popup=f"{sehir['sehir']} (Önem: {sehir['onem']})",
-                icon=folium.Icon(color="green", icon="cloud"),
-            ).add_to(harita)
+        if ekip == st.session_state.aktif_ekip:
+            for sehir in details["visited_cities"]:
+                sehir_konum = sehir["konum"]
+                folium.Marker(
+                    [sehir_konum["lat"], sehir_konum["lng"]],
+                    popup=f"{sehir['sehir']} (Önem: {sehir['onem']})",
+                    icon=folium.Icon(color="green", icon="cloud"),
+                ).add_to(harita)
 
     # Haritayı Streamlit üzerinden gösterin
     st_folium(harita, width=700)
@@ -142,11 +153,23 @@ def generate_excel():
     data = []
     for ekip, details in st.session_state.ekipler.items():
         for sehir in details["visited_cities"]:
+            # İşçilik maliyeti ve yol masrafını hesapla
+            yol_masrafi = haversine(
+                (st.session_state.baslangic_konum["lat"], st.session_state.baslangic_konum["lng"]),
+                (sehir["konum"]["lat"], sehir["konum"]["lng"])
+            ) * km_basi_tuketim * benzin_fiyati
+            iscik_maliyet = sehir["is_suresi"] * SAATLIK_ISCILIK
+            toplam_maliyet = yol_masrafi + iscik_maliyet
+
             row = {
                 "Ekip Adı": ekip,
                 "Şehir": sehir["sehir"],
                 "Montaj Süresi (saat)": sehir["is_suresi"],
                 "Önem Derecesi": sehir["onem"],
+                "İşçilik Maliyeti (TL)": round(iscik_maliyet, 2),
+                "Yol Masrafı (TL)": round(yol_masrafi, 2),
+                "Toplam Maliyet (TL)": round(toplam_maliyet, 2),
+                "Ekip Üyeleri": ", ".join(details["members"]),
             }
             data.append(row)
 
