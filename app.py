@@ -12,7 +12,7 @@ import io
 from openpyxl.utils import get_column_letter
 
 # Google Maps API Anahtarınızı girin
-gmaps = googlemaps.Client(key="YOUR_GOOGLE_MAPS_API_KEY")
+gmaps = googlemaps.Client(key="AIzaSyDwQVuPcON3rGSibcBrwhxQvz4HLTpF9Ws")
 
 # PAGE CONFIG
 title = "Montaj Rota Planlayıcı"
