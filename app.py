@@ -1,31 +1,38 @@
 import streamlit as st
-import googlemaps
 import folium
 from streamlit_folium import st_folium
-from datetime import timedelta
-from haversine import haversine
-from fpdf import FPDF
-import base64
-from io import BytesIO
+import googlemaps
+from math import radians, cos, sin, asin, sqrt
 import pandas as pd
-import io
-from openpyxl.utils import get_column_letter
+from io import BytesIO
+import datetime
 
-# Google Maps API Anahtarınızı girin
+# Google Maps API anahtarını girin
 gmaps = googlemaps.Client(key="AIzaSyDwQVuPcON3rGSibcBrwhxQvz4HLTpF9Ws")
 
-# PAGE CONFIG
-title = "Montaj Rota Planlayıcı"
-st.set_page_config(page_title=title, layout="wide")
-st.title(f"🛠️ {title}")
+# Sayfa ayarları
+st.set_page_config(page_title="Montaj Rota Planlayıcı", layout="wide")
+st.title("🔧 Montaj Rota Planlayıcı Uygulaması")
 
-# GLOBAL Sabitler
-SAATLIK_ISCILIK = st.sidebar.number_input("Saatlik İŞçilik Üreti (TL)", min_value=100, value=500, step=50)
-benzin_fiyati = st.sidebar.number_input("Benzin Fiyatı (TL/L)", min_value=0.1, value=10.0, step=0.1)
-km_basi_tuketim = st.sidebar.number_input("Km Başına Tüketim (L/km)", min_value=0.01, value=0.1, step=0.01)
-siralama_tipi = st.sidebar.radio("Rota Sıralama Tipi", ["Önem Derecesi", "En Kısa Rota"])
+# Sabitler
+SAATLIK_ISCILIK = 500  # TL
+yakit_tuketimi_lt_100km = 8  # litre
+benzin_fiyati = 43.5  # TL
+km_basi_tuketim = yakit_tuketimi_lt_100km / 100
 
-# Session Init
+# Haversine fonksiyonu
+def haversine(coord1, coord2):
+    lon1, lat1 = coord1[1], coord1[0]
+    lon2, lat2 = coord2[1], coord2[0]
+    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+    c = 2 * asin(sqrt(a))
+    km = 6371 * c
+    return km
+
+# Oturum durumu başlatma
 if "ekipler" not in st.session_state:
     st.session_state.ekipler = {}
 if "aktif_ekip" not in st.session_state:
@@ -33,44 +40,35 @@ if "aktif_ekip" not in st.session_state:
 if "baslangic_konum" not in st.session_state:
     st.session_state.baslangic_konum = None
 
-# Ekip Yönetimi
-st.sidebar.subheader("👷 Ekip Yönetimi")
-ekip_adi = st.sidebar.text_input("Yeni Ekip Adı")
-if st.sidebar.button("➕ Ekip Oluştur") and ekip_adi:
-    if ekip_adi not in st.session_state.ekipler:
-        st.session_state.ekipler[ekip_adi] = {"members": [], "visited_cities": []}
-        st.session_state.aktif_ekip = ekip_adi
+# Sidebar - Ekip Tanımlama
+st.sidebar.header("👥 Ekip Tanımlama")
+aktif = st.sidebar.text_input("Yeni Ekip Adı")
+if st.sidebar.button("➕ Ekip Oluştur"):
+    if aktif and aktif not in st.session_state.ekipler:
+        st.session_state.ekipler[aktif] = {"members": [], "visited_cities": []}
+        st.session_state.aktif_ekip = aktif
 
-aktif_secim = st.sidebar.selectbox("Aktif Ekip Seç", list(st.session_state.ekipler.keys()))
-st.session_state.aktif_ekip = aktif_secim
+# Aktif ekip seçimi
+if st.session_state.ekipler:
+    ekip_sec = st.sidebar.selectbox("Aktif Ekip Seç", list(st.session_state.ekipler.keys()), index=0)
+    st.session_state.aktif_ekip = ekip_sec
 
-# Ekip Üyeleri
+# Ekip üyeleri
 st.sidebar.subheader("Ekip Üyeleri")
-for ekip, details in st.session_state.ekipler.items():
-    if ekip == st.session_state.aktif_ekip:
-        new_member = st.sidebar.text_input(f"{ekip} için yeni üye ekleyin", key=f"new_member_{ekip}")
-        if st.sidebar.button(f"➕ {ekip} Üyesi Ekle"):
-            if new_member:
-                details["members"].append(new_member)
-                st.sidebar.success(f"{new_member} {ekip} ekibine eklendi.")
-        for i, uye in enumerate(details["members"]):
-            col1, col2 = st.sidebar.columns([4, 1])
-            col1.write(uye)
-            if col2.button("❌", key=f"remove_{uye}_{i}"):
-                details["members"].remove(uye)
-                st.experimental_rerun()
+yeni_uye = st.sidebar.text_input("Üye Adı")
+if st.sidebar.button("👤 Üye Ekle") and yeni_uye:
+    st.session_state.ekipler[st.session_state.aktif_ekip]["members"].append(yeni_uye)
 
-# Başlangıç Noktası
+# Başlangıç noktası seçimi
 st.sidebar.subheader("📍 Başlangıç Noktası")
-if not st.session_state.baslangic_konum:
-    adres_input = st.sidebar.text_input("Manuel Adres Girin (1 kez girilir)")
-    if st.sidebar.button("✅ Adres Onayla") and adres_input:
-        sonuc = gmaps.geocode(adres_input)
-        if sonuc:
-            st.session_state.baslangic_konum = sonuc[0]["geometry"]["location"]
-            st.sidebar.success("Başlangıç noktası belirlendi.")
-        else:
-            st.sidebar.error("Adres bulunamadı.")
+baslangic = st.sidebar.text_input("Başlangıç Konumu", value="Gebze")
+if st.sidebar.button("📌 Konumu Ayarla"):
+    sonuc = gmaps.geocode(baslangic)
+    if sonuc:
+        st.session_state.baslangic_konum = sonuc[0]["geometry"]["location"]
+        st.sidebar.success("Konum ayarlandı")
+    else:
+        st.sidebar.error("Konum bulunamadı")
 
 # Şehir Ekleme
 st.subheader("📌 Şehir Ekle")
@@ -78,6 +76,7 @@ with st.form("sehir_form"):
     sehir_adi = st.text_input("Şehir / Bayi Adı")
     onem = st.slider("Önem Derecesi", 1, 5, 3)
     is_suresi = st.number_input("Montaj Süre (saat)", 1, 24, 2)
+    tarih = st.date_input("Planlanan Tarih", value=datetime.date.today())
     ekle_btn = st.form_submit_button("➕ Şehir Ekle")
     if ekle_btn:
         sonuc = gmaps.geocode(sehir_adi)
@@ -87,68 +86,47 @@ with st.form("sehir_form"):
                 "sehir": sehir_adi,
                 "konum": konum,
                 "onem": onem,
-                "is_suresi": is_suresi
+                "is_suresi": is_suresi,
+                "tarih": tarih.strftime("%Y-%m-%d")
             })
             st.success(f"{sehir_adi} eklendi.")
         else:
             st.error("Konum bulunamadı.")
 
-# Harita Oluşturma
-st.subheader("🗺️ Aktif Ekiplerin Haritası")
-if st.session_state.baslangic_konum:
-    baslangic = st.session_state.baslangic_konum
-    harita = folium.Map(location=[baslangic["lat"], baslangic["lng"]], zoom_start=6)
-    folium.Marker([baslangic["lat"], baslangic["lng"]], popup="Başlangıç", icon=folium.Icon(color="blue")).add_to(harita)
-
-    ekip = st.session_state.ekipler[st.session_state.aktif_ekip]
-    sehirler = ekip["visited_cities"]
-    if siralama_tipi == "Önem Derecesi":
-        sehirler = sorted(sehirler, key=lambda x: x["onem"], reverse=True)
-    else:
-        sehirler = sorted(sehirler, key=lambda x: haversine(
-            (baslangic["lat"], baslangic["lng"]),
-            (x["konum"]["lat"], x["konum"]["lng"])
-        ))
-
-    rota = [baslangic] + [s["konum"] for s in sehirler] + [baslangic]  # gidiş-dönüş
+# Harita ve Rota
+st.subheader("🗺️ Rota Haritası")
+if st.session_state.baslangic_konum and st.session_state.ekipler[st.session_state.aktif_ekip]["visited_cities"]:
+    harita = folium.Map(location=[st.session_state.baslangic_konum["lat"], st.session_state.baslangic_konum["lng"]], zoom_start=6)
+    folium.Marker([st.session_state.baslangic_konum["lat"], st.session_state.baslangic_konum["lng"]], tooltip="Başlangıç", icon=folium.Icon(color='green')).add_to(harita)
+    sirali_sehirler = sorted(st.session_state.ekipler[st.session_state.aktif_ekip]["visited_cities"], key=lambda x: x["onem"], reverse=True)
     toplam_km = 0
-    for i, konum in enumerate(rota):
-        if i < len(rota) - 1:
-            bas = (rota[i]["lat"], rota[i]["lng"])
-            son = (rota[i+1]["lat"], rota[i+1]["lng"])
-            toplam_km += haversine(bas, son)
-            folium.PolyLine([bas, son], color="green").add_to(harita)
-
-    for i, sehir in enumerate(sehirler, 1):
-        lat, lng = sehir["konum"]["lat"], sehir["konum"]["lng"]
-        folium.Marker(
-            [lat, lng],
-            popup=f"{i}. {sehir['sehir']} (Önem: {sehir['onem']})",
-            icon=folium.DivIcon(html=f"<div style='font-size: 12pt; color: red'>{i}</div>")
-        ).add_to(harita)
-
-    st_folium(harita, width=700)
+    onceki_konum = st.session_state.baslangic_konum
+    for i, sehir in enumerate(sirali_sehirler, start=1):
+        konum = sehir["konum"]
+        folium.Marker([konum["lat"], konum["lng"]], tooltip=f"{i}. {sehir['sehir']}\n({sehir['tarih']})").add_to(harita)
+        mesafe = haversine((onceki_konum["lat"], onceki_konum["lng"]), (konum["lat"], konum["lng"]))
+        toplam_km += mesafe
+        onceki_konum = konum
     st.markdown(f"**Toplam Mesafe:** {round(toplam_km, 2)} km")
-else:
-    st.warning("Başlangıç konumunu belirleyin.")
+    st_folium(harita, width=700, height=500)
 
-# Excel Oluşturma
-st.subheader("📄 Excel Raporu")
+# Excel çıktısı oluşturma
+st.subheader("📄 Raporlama")
 def generate_excel():
     data = []
     for ekip, details in st.session_state.ekipler.items():
         for sehir in details["visited_cities"]:
-            yol_km = haversine(
+            yol_masrafi = haversine(
                 (st.session_state.baslangic_konum["lat"], st.session_state.baslangic_konum["lng"]),
                 (sehir["konum"]["lat"], sehir["konum"]["lng"])
-            ) * 2  # gidiş dönüş
-            yol_masrafi = yol_km * km_basi_tuketim * benzin_fiyati
+            ) * km_basi_tuketim * benzin_fiyati
             iscik_maliyet = sehir["is_suresi"] * SAATLIK_ISCILIK
             toplam_maliyet = yol_masrafi + iscik_maliyet
 
             data.append({
                 "Ekip Adı": ekip,
                 "Şehir": sehir["sehir"],
+                "Tarih": sehir.get("tarih", ""),
                 "Montaj Süre (saat)": sehir["is_suresi"],
                 "Önem Derecesi": sehir["onem"],
                 "İŞçilik Maliyeti (TL)": round(iscik_maliyet, 2),
@@ -158,19 +136,11 @@ def generate_excel():
             })
 
     df = pd.DataFrame(data)
-    excel_buffer = io.BytesIO()
-    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name="Montaj Planı")
-        worksheet = writer.sheets["Montaj Planı"]
-        for i, col in enumerate(df.columns, 1):
-            max_len = max(df[col].astype(str).map(len).max(), len(col))
-            worksheet.column_dimensions[get_column_letter(i)].width = max_len + 5
-    excel_buffer.seek(0)
-    return excel_buffer
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="Rapor")
+    return output.getvalue()
 
-st.download_button(
-    label="Excel Olarak İndir",
-    data=generate_excel(),
-    file_name="montaj_plani.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-)
+if st.button("📥 Excel Olarak İndir"):
+    excel_bytes = generate_excel()
+    st.download_button(label="Raporu İndir", data=excel_bytes, file_name="montaj_raporu.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
