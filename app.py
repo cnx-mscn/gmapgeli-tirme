@@ -110,17 +110,51 @@ if st.session_state.baslangic_konum:
             (x["konum"]["lat"], x["konum"]["lng"])
         ))
 
+        toplam_sure_dk = 0
+    toplam_km = 0
     for i, sehir in enumerate(sehirler, 1):
         lat, lng = sehir["konum"]["lat"], sehir["konum"]["lng"]
+
+        # Gerçek rota verisi
+        direction = gmaps.directions(
+            f"{baslangic['lat']},{baslangic['lng']}",
+            f"{lat},{lng}",
+            mode="driving"
+        )
+
+        if direction:
+            rota = direction[0]["legs"][0]
+            sure = rota["duration"]["value"] / 60  # dakika
+            mesafe = rota["distance"]["value"] / 1000  # km
+
+            toplam_sure_dk += sure
+            toplam_km += mesafe
+
+            # Haritada çizim
+            steps = rota["steps"]
+            points = []
+            for step in steps:
+                polyline = step["polyline"]["points"]
+                points += folium.PolyLine(locations=folium.utilities.decode_polyline(polyline)).locations
+
+            folium.PolyLine(points, color="green", weight=4, opacity=0.7).add_to(harita)
+        else:
+            mesafe = haversine(
+                (baslangic["lat"], baslangic["lng"]),
+                (lat, lng)
+            )
+            sure = mesafe / 70 * 60  # Ortalama hız: 70 km/s varsayımı
+
+        # Marker Ekle
         folium.Marker(
             [lat, lng],
-            popup=f"{i}. {sehir['sehir']} (Onem: {sehir['onem']})",
+            popup=f"{i}. {sehir['sehir']} (Önem: {sehir['onem']})",
             icon=folium.DivIcon(html=f"<div style='font-size: 12pt; color: red'>{i}</div>")
         ).add_to(harita)
-        folium.PolyLine([(baslangic["lat"], baslangic["lng"]), (lat, lng)], color="green").add_to(harita)
+
+        # Yeni başlangıç noktası
         baslangic = sehir["konum"]
 
-    st_folium(harita, width=700)
 else:
     st.warning("Başlangıç konumunu belirleyin.")
 
