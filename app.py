@@ -20,7 +20,7 @@ st.set_page_config(page_title=title, layout="wide")
 st.title(f"🛠️ {title}")
 
 # GLOBAL Sabitler
-SAATLIK_ISCILIK = st.sidebar.number_input("Saatlik İŞçilik Üreti (TL)", min_value=100, value=500, step=50)
+SAATLIK_ISCILIK = st.sidebar.number_input("Saatlik İŞçilik Ücreti (TL)", min_value=100, value=500, step=50)
 benzin_fiyati = st.sidebar.number_input("Benzin Fiyatı (TL/L)", min_value=0.1, value=10.0, step=0.1)
 km_basi_tuketim = st.sidebar.number_input("Km Başına Tüketim (L/km)", min_value=0.01, value=0.1, step=0.01)
 siralama_tipi = st.sidebar.radio("Rota Sıralama Tipi", ["Önem Derecesi", "En Kısa Rota"])
@@ -110,56 +110,39 @@ if st.session_state.baslangic_konum:
             (x["konum"]["lat"], x["konum"]["lng"])
         ))
 
-        toplam_sure_dk = 0
+    toplam_sure_dk = 0
     toplam_km = 0
+
     for i, sehir in enumerate(sehirler, 1):
         lat, lng = sehir["konum"]["lat"], sehir["konum"]["lng"]
-
-        # Gerçek rota verisi
-        direction = gmaps.directions(
-            f"{baslangic['lat']},{baslangic['lng']}",
-            f"{lat},{lng}",
-            mode="driving"
-        )
-
-        if direction:
-            rota = direction[0]["legs"][0]
-            sure = rota["duration"]["value"] / 60  # dakika
-            mesafe = rota["distance"]["value"] / 1000  # km
-
-            toplam_sure_dk += sure
-            toplam_km += mesafe
-
-            # Haritada çizim
-            steps = rota["steps"]
-            points = []
-            for step in steps:
-                polyline = step["polyline"]["points"]
-                points += folium.PolyLine(locations=folium.utilities.decode_polyline(polyline)).locations
-
-            folium.PolyLine(points, color="green", weight=4, opacity=0.7).add_to(harita)
-        else:
-            mesafe = haversine(
-                (baslangic["lat"], baslangic["lng"]),
-                (lat, lng)
-            )
-            sure = mesafe / 70 * 60  # Ortalama hız: 70 km/s varsayımı
-
-        # Marker Ekle
         folium.Marker(
             [lat, lng],
-            popup=f"{i}. {sehir['sehir']} (Önem: {sehir['onem']})",
+            popup=f"{i}. {sehir['sehir']} (Onem: {sehir['onem']})",
             icon=folium.DivIcon(html=f"<div style='font-size: 12pt; color: red'>{i}</div>")
         ).add_to(harita)
 
-        # Yeni başlangıç noktası
+        try:
+            directions = gmaps.directions(
+                origin=(baslangic["lat"], baslangic["lng"]),
+                destination=(lat, lng),
+                mode="driving"
+            )
+            if directions:
+                mesafe = directions[0]["legs"][0]["distance"]["value"] / 1000  # km
+                sure = directions[0]["legs"][0]["duration"]["value"] / 60  # dakika
+                toplam_sure_dk += sure
+                toplam_km += mesafe
+                folium.PolyLine([(baslangic["lat"], baslangic["lng"]), (lat, lng)], color="green").add_to(harita)
+        except:
+            pass
+
         baslangic = sehir["konum"]
 
+    st_folium(harita, width=700)
+    st.markdown(f"**Toplam Mesafe:** {round(toplam_km, 2)} km")
+    st.markdown(f"**Tahmini Yol Süresi:** {round(toplam_sure_dk / 60, 2)} saat")
 else:
     st.warning("Başlangıç konumunu belirleyin.")
-        st.markdown(f"**Toplam Mesafe:** {round(toplam_km, 2)} km")
-    st.markdown(f"**Tahmini Yol Süresi:** {round(toplam_sure_dk / 60, 2)} saat")
-
 
 # Excel Oluşturma
 st.subheader("📄 Excel Raporu")
