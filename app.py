@@ -56,8 +56,7 @@ for ekip, details in st.session_state.ekipler.items():
         for i, uye in enumerate(details["members"]):
             col1, col2 = st.sidebar.columns([4, 1])
             col1.write(uye)
-            if col2.button("❌", key=f"remove_{uye}_{i}"):
-
+            if col2.button("❌", key=f"remove_{uye}_{i}") :
                 details["members"].remove(uye)
                 st.experimental_rerun()
 
@@ -79,7 +78,7 @@ with st.form("sehir_form"):
     sehir_adi = st.text_input("Şehir / Bayi Adı")
     onem = st.slider("Önem Derecesi", 1, 5, 3)
     is_suresi = st.number_input("Montaj Süre (saat)", 1, 24, 2)
-    tarih = st.date_input("Montaj Tarihi", min_value=pd.to_datetime('2025-01-01'))
+    tarih = st.date_input("Montaj Tarihi")
     ekle_btn = st.form_submit_button("➕ Şehir Ekle")
     if ekle_btn:
         sonuc = gmaps.geocode(sehir_adi)
@@ -90,7 +89,7 @@ with st.form("sehir_form"):
                 "konum": konum,
                 "onem": onem,
                 "is_suresi": is_suresi,
-                "tarih": str(tarih)  # Tarih bilgisini ekliyoruz
+                "tarih": str(tarih)
             })
             st.success(f"{sehir_adi} eklendi.")
         else:
@@ -115,10 +114,9 @@ if st.session_state.baslangic_konum:
 
     for i, sehir in enumerate(sehirler, 1):
         lat, lng = sehir["konum"]["lat"], sehir["konum"]["lng"]
-        tarih = sehir.get('tarih', 'Tarih Bilgisi Yok')  # Tarih bilgisini kontrol et
         folium.Marker(
             [lat, lng],
-            popup=f"{i}. {sehir['sehir']} (Onem: {sehir['onem']})\n({tarih})",
+            popup=f"{i}. {sehir['sehir']} (Onem: {sehir['onem']})\nTarih: {sehir['tarih']}",
             icon=folium.DivIcon(html=f"<div style='font-size: 12pt; color: red'>{i}</div>")
         ).add_to(harita)
         folium.PolyLine([(baslangic["lat"], baslangic["lng"]), (lat, lng)], color="green").add_to(harita)
@@ -128,8 +126,12 @@ if st.session_state.baslangic_konum:
 else:
     st.warning("Başlangıç konumunu belirleyin.")
 
-# Excel Oluşturma
-st.subheader("📄 Excel Raporu")
+# Gelişmiş Maliyet Hesaplama
+st.subheader("📝 Ekstra Maliyet Hesaplamaları")
+otel_masrafi = st.number_input("Otel Masrafı (TL)", min_value=0, value=0)
+yemek_masrafi = st.number_input("Yemek Masrafı (TL)", min_value=0, value=0)
+
+# Excel ve PDF Çıktısı
 def generate_excel():
     data = []
     for ekip, details in st.session_state.ekipler.items():
@@ -139,18 +141,19 @@ def generate_excel():
                 (sehir["konum"]["lat"], sehir["konum"]["lng"])
             ) * km_basi_tuketim * benzin_fiyati
             iscik_maliyet = sehir["is_suresi"] * SAATLIK_ISCILIK
-            toplam_maliyet = yol_masrafi + iscik_maliyet
+            toplam_maliyet = yol_masrafi + iscik_maliyet + otel_masrafi + yemek_masrafi
 
             data.append({
                 "Ekip Adı": ekip,
                 "Şehir": sehir["sehir"],
                 "Montaj Süre (saat)": sehir["is_suresi"],
                 "Önem Derecesi": sehir["onem"],
-                "İŞçilik Maliyeti (TL)": round(iscik_maliyet, 2),
+                "İşçilik Maliyeti (TL)": round(iscik_maliyet, 2),
                 "Yol Masrafı (TL)": round(yol_masrafi, 2),
+                "Otel Masrafı (TL)": otel_masrafi,
+                "Yemek Masrafı (TL)": yemek_masrafi,
                 "Toplam Maliyet (TL)": round(toplam_maliyet, 2),
                 "Ekip Üyeleri": ", ".join(details["members"]),
-                "Tarih": sehir["tarih"],  # Tarih bilgisini ekliyoruz
             })
 
     df = pd.DataFrame(data)
@@ -164,6 +167,7 @@ def generate_excel():
     excel_buffer.seek(0)
     return excel_buffer
 
+# Excel Raporu
 st.download_button(
     label="Excel Olarak İndir",
     data=generate_excel(),
