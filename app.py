@@ -157,6 +157,9 @@ if st.session_state.baslangic_konum:
 
 else:
     st.warning("Başlangıç konumunu belirleyin.")
+        st.markdown(f"**Toplam Mesafe:** {round(toplam_km, 2)} km")
+    st.markdown(f"**Tahmini Yol Süresi:** {round(toplam_sure_dk / 60, 2)} saat")
+
 
 # Excel Oluşturma
 st.subheader("📄 Excel Raporu")
