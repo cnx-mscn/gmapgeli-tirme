@@ -10,6 +10,7 @@ from io import BytesIO
 import pandas as pd
 import io
 from openpyxl.utils import get_column_letter
+from PIL import Image
 
 # Google Maps API Anahtarınızı girin
 gmaps = googlemaps.Client(key="AIzaSyDwQVuPcON3rGSibcBrwhxQvz4HLTpF9Ws")
@@ -95,6 +96,44 @@ with st.form("sehir_form"):
         else:
             st.error("Konum bulunamadı.")
 
+# İşçi Arayüzü: Şehir Görevleri, Fotoğraf Yükleme
+st.subheader("📸 İşçi Görev ve Fotoğraf Yükleme")
+aktif_ekip = st.session_state.ekipler.get(st.session_state.aktif_ekip)
+if aktif_ekip:
+    for sehir in aktif_ekip["visited_cities"]:
+        sehir_adi = sehir["sehir"]
+        # İşçi görevi için şehir detayları göster
+        if st.button(f"✅ {sehir_adi} Görevini Tamamladım"):
+            # Fotoğraf yükleme alanı
+            uploaded_file = st.file_uploader(f"{sehir_adi} Fotoğraf Yükleyin", type=["jpg", "jpeg", "png"])
+            if uploaded_file is not None:
+                img = Image.open(uploaded_file)
+                st.image(img, caption=f"{sehir_adi} fotoğrafı", use_column_width=True)
+                # Yönetici onayı
+                if st.button(f"Yönetici Onayı İçin Gönder: {sehir_adi}"):
+                    st.session_state.ekipler[st.session_state.aktif_ekip]["visited_cities"] = [
+                        {**sehir, "fotoğraf": uploaded_file.name, "onay": False}
+                    ]
+                    st.success(f"{sehir_adi} için fotoğraf gönderildi. Yöneticinin onayını bekliyor...")
+
+# Yönetici Onayı: Fotoğrafı onayla
+st.subheader("🧑‍💼 Yönetici Onayı")
+onaylanan_gorevler = []
+for ekip, details in st.session_state.ekipler.items():
+    for sehir in details["visited_cities"]:
+        if "fotoğraf" in sehir and not sehir.get("onay", False):
+            onay_btn = st.button(f"Fotoğrafı Onayla: {sehir['sehir']}", key=f"onay_{sehir['sehir']}")
+            if onay_btn:
+                sehir["onay"] = True
+                onaylanan_gorevler.append(sehir['sehir'])
+                st.success(f"{sehir['sehir']} görevi onaylandı!")
+
+if onaylanan_gorevler:
+    st.write("Onaylanan Şehirler:", ", ".join(onaylanan_gorevler))
+    # Sonraki şehire yönlendirme
+    for sehir in onaylanan_gorevler:
+        st.write(f"Yönlendirme: {sehir} sonrası bir sonraki şehire gidiniz.")
+
 # Harita Oluşturma
 st.subheader("🗺️ Aktif Ekiplerin Haritası")
 if st.session_state.baslangic_konum:
@@ -123,13 +162,6 @@ if st.session_state.baslangic_konum:
         baslangic = sehir["konum"]
 
     st_folium(harita, width=700)
-else:
-    st.warning("Başlangıç konumunu belirleyin.")
-
-# Gelişmiş Maliyet Hesaplama
-st.subheader("📝 Ekstra Maliyet Hesaplamaları")
-otel_masrafi = st.number_input("Otel Masrafı (TL)", min_value=0, value=0)
-yemek_masrafi = st.number_input("Yemek Masrafı (TL)", min_value=0, value=0)
 
 # Excel ve PDF Çıktısı
 def generate_excel():
@@ -141,7 +173,7 @@ def generate_excel():
                 (sehir["konum"]["lat"], sehir["konum"]["lng"])
             ) * km_basi_tuketim * benzin_fiyati
             iscik_maliyet = sehir["is_suresi"] * SAATLIK_ISCILIK
-            toplam_maliyet = yol_masrafi + iscik_maliyet + otel_masrafi + yemek_masrafi
+            toplam_maliyet = yol_masrafi + iscik_maliyet
 
             data.append({
                 "Ekip Adı": ekip,
@@ -150,8 +182,6 @@ def generate_excel():
                 "Önem Derecesi": sehir["onem"],
                 "İşçilik Maliyeti (TL)": round(iscik_maliyet, 2),
                 "Yol Masrafı (TL)": round(yol_masrafi, 2),
-                "Otel Masrafı (TL)": otel_masrafi,
-                "Yemek Masrafı (TL)": yemek_masrafi,
                 "Toplam Maliyet (TL)": round(toplam_maliyet, 2),
                 "Ekip Üyeleri": ", ".join(details["members"]),
             })
