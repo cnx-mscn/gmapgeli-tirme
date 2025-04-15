@@ -28,116 +28,109 @@ if "aktif_ekip" not in st.session_state:
     st.session_state.aktif_ekip = None
 if "baslangic_konum" not in st.session_state:
     st.session_state.baslangic_konum = None
+if "kullanici_tipi" not in st.session_state:
+    st.session_state.kullanici_tipi = "Yönetici"  # Varsayılan olarak yönetici
+
+# Kullanıcı Tipi Seçimi (Yönetici / İşçi)
+kullanici_tipi = st.sidebar.selectbox("Kullanıcı Tipini Seç", ["Yönetici", "İşçi"])
+st.session_state.kullanici_tipi = kullanici_tipi
 
 # Ekip Yönetimi
-st.sidebar.subheader("👷 Ekip Yönetimi")
-ekip_adi = st.sidebar.text_input("Yeni Ekip Adı")
-if st.sidebar.button("➕ Ekip Oluştur") and ekip_adi:
-    if ekip_adi not in st.session_state.ekipler:
-        st.session_state.ekipler[ekip_adi] = {"members": [], "visited_cities": []}
-        st.session_state.aktif_ekip = ekip_adi
+if st.session_state.kullanici_tipi == "Yönetici":
+    st.sidebar.subheader("👷 Ekip Yönetimi")
+    ekip_adi = st.sidebar.text_input("Yeni Ekip Adı")
+    if st.sidebar.button("➕ Ekip Oluştur") and ekip_adi:
+        if ekip_adi not in st.session_state.ekipler:
+            st.session_state.ekipler[ekip_adi] = {"members": [], "visited_cities": []}
+            st.session_state.aktif_ekip = ekip_adi
 
-aktif_secim = st.sidebar.selectbox("Aktif Ekip Seç", list(st.session_state.ekipler.keys()))
-st.session_state.aktif_ekip = aktif_secim
+    aktif_secim = st.sidebar.selectbox("Aktif Ekip Seç", list(st.session_state.ekipler.keys()))
+    st.session_state.aktif_ekip = aktif_secim
 
-# Başlangıç Noktası
-st.sidebar.subheader("📍 Başlangıç Noktası")
-if not st.session_state.baslangic_konum:
-    adres_input = st.sidebar.text_input("Manuel Adres Girin (1 kez girilir)")
-    if st.sidebar.button("✅ Adres Onayla") and adres_input:
-        sonuc = gmaps.geocode(adres_input)
-        if sonuc:
-            st.session_state.baslangic_konum = sonuc[0]["geometry"]["location"]
-            st.sidebar.success("Başlangıç noktası belirlendi.")
+    # Başlangıç Noktası
+    st.sidebar.subheader("📍 Başlangıç Noktası")
+    if not st.session_state.baslangic_konum:
+        adres_input = st.sidebar.text_input("Manuel Adres Girin (1 kez girilir)")
+        if st.sidebar.button("✅ Adres Onayla") and adres_input:
+            sonuc = gmaps.geocode(adres_input)
+            if sonuc:
+                st.session_state.baslangic_konum = sonuc[0]["geometry"]["location"]
+                st.sidebar.success("Başlangıç noktası belirlendi.")
+            else:
+                st.sidebar.error("Adres bulunamadı.")
+
+    # Şehir Ekleme
+    st.subheader("📌 Şehir Ekle")
+    with st.form("sehir_form"):
+        sehir_adi = st.text_input("Şehir / Bayi Adı")
+        onem = st.slider("Önem Derecesi", 1, 5, 3)
+        is_suresi = st.number_input("Montaj Süre (saat)", 1, 24, 2)
+        tarih = st.date_input("Montaj Tarihi")
+        ekle_btn = st.form_submit_button("➕ Şehir Ekle")
+        if ekle_btn:
+            sonuc = gmaps.geocode(sehir_adi)
+            if sonuc:
+                konum = sonuc[0]["geometry"]["location"]
+                st.session_state.ekipler[st.session_state.aktif_ekip]["visited_cities"].append({
+                    "sehir": sehir_adi,
+                    "konum": konum,
+                    "onem": onem,
+                    "is_suresi": is_suresi,
+                    "tarih": str(tarih)
+                })
+                st.success(f"{sehir_adi} eklendi.")
+            else:
+                st.error("Konum bulunamadı.")
+
+    # Harita Oluşturma
+    st.subheader("🗺️ Aktif Ekiplerin Haritası")
+    if st.session_state.baslangic_konum:
+        baslangic = st.session_state.baslangic_konum
+        harita = folium.Map(location=[baslangic["lat"], baslangic["lng"]], zoom_start=6)
+        folium.Marker([baslangic["lat"], baslangic["lng"]], popup="Başlangıç", icon=folium.Icon(color="blue")).add_to(harita)
+
+        ekip = st.session_state.ekipler[st.session_state.aktif_ekip]
+        sehirler = ekip["visited_cities"]
+        if siralama_tipi == "Önem Derecesi":
+            sehirler = sorted(sehirler, key=lambda x: x["onem"], reverse=True)
         else:
-            st.sidebar.error("Adres bulunamadı.")
+            sehirler = sorted(sehirler, key=lambda x: haversine(
+                (baslangic["lat"], baslangic["lng"]),
+                (x["konum"]["lat"], x["konum"]["lng"])
+            ))
 
-# Şehir Ekleme
-st.subheader("📌 Şehir Ekle")
-with st.form("sehir_form"):
-    sehir_adi = st.text_input("Şehir / Bayi Adı")
-    onem = st.slider("Önem Derecesi", 1, 5, 3)
-    is_suresi = st.number_input("Montaj Süre (saat)", 1, 24, 2)
-    tarih = st.date_input("Montaj Tarihi")
-    ekle_btn = st.form_submit_button("➕ Şehir Ekle")
-    if ekle_btn:
-        sonuc = gmaps.geocode(sehir_adi)
-        if sonuc:
-            konum = sonuc[0]["geometry"]["location"]
-            st.session_state.ekipler[st.session_state.aktif_ekip]["visited_cities"].append({
-                "sehir": sehir_adi,
-                "konum": konum,
-                "onem": onem,
-                "is_suresi": is_suresi,
-                "tarih": str(tarih)
-            })
-            st.success(f"{sehir_adi} eklendi.")
-        else:
-            st.error("Konum bulunamadı.")
+        for i, sehir in enumerate(sehirler, 1):
+            lat, lng = sehir["konum"]["lat"], sehir["konum"]["lng"]
+            folium.Marker(
+                [lat, lng],
+                popup=f"{i}. {sehir['sehir']} (Onem: {sehir['onem']})\nTarih: {sehir['tarih']}",
+                icon=folium.DivIcon(html=f"<div style='font-size: 12pt; color: red'>{i}</div>")
+            ).add_to(harita)
+            folium.PolyLine([(baslangic["lat"], baslangic["lng"]), (lat, lng)], color="green").add_to(harita)
+            baslangic = sehir["konum"]
 
-# İşçi Arayüzü: Şehir Görevleri, Fotoğraf Yükleme
-st.subheader("📸 İşçi Görev ve Fotoğraf Yükleme")
-aktif_ekip = st.session_state.ekipler.get(st.session_state.aktif_ekip)
-if aktif_ekip:
-    for sehir in aktif_ekip["visited_cities"]:
-        sehir_adi = sehir["sehir"]
-        # İşçi görevi için şehir detayları göster
-        if st.button(f"✅ {sehir_adi} Görevini Tamamladım"):
-            # Fotoğraf yükleme alanı
+        st_folium(harita, width=700)
+
+elif st.session_state.kullanici_tipi == "İşçi":
+    # İşçi Arayüzü: Şehir Görevleri, Fotoğraf Yükleme
+    st.subheader("📸 İşçi Görev ve Fotoğraf Yükleme")
+    aktif_ekip = st.session_state.ekipler.get(st.session_state.aktif_ekip)
+    if aktif_ekip:
+        for sehir in aktif_ekip["visited_cities"]:
+            sehir_adi = sehir["sehir"]
+            # İşçi görevi için şehir detayları göster
+            st.write(f"Şehir: {sehir_adi}")
+            st.write(f"Montaj Süresi: {sehir['is_suresi']} saat")
+            st.write(f"Tarih: {sehir['tarih']}")
+            
+            # İşçi fotoğraf yükleme seçeneği
             uploaded_file = st.file_uploader(f"{sehir_adi} Fotoğraf Yükleyin", type=["jpg", "jpeg", "png"])
             if uploaded_file is not None:
                 img = Image.open(uploaded_file)
                 st.image(img, caption=f"{sehir_adi} fotoğrafı", use_column_width=True)
-                # Yönetici onayı
                 if st.button(f"Yönetici Onayı İçin Gönder: {sehir_adi}"):
-                    # Burada fotoğraf, işçinin görevi tamamladığını ve yöneticinin onayını beklediğini belirtmek için güncellenecek
+                    # Fotoğraf, işçinin görevi tamamladığını ve yöneticinin onayını beklediğini belirtmek için güncellenecek
                     sehir["fotoğraf"] = uploaded_file.name
                     sehir["onay"] = False  # Fotoğrafın onayı bekleniyor
                     st.success(f"{sehir_adi} için fotoğraf gönderildi. Yöneticinin onayını bekliyor...")
 
-# Yönetici Onayı: Fotoğrafı onayla
-st.subheader("🧑‍💼 Yönetici Onayı")
-onaylanan_gorevler = []
-for ekip, details in st.session_state.ekipler.items():
-    for sehir in details["visited_cities"]:
-        if "fotoğraf" in sehir and not sehir.get("onay", False):
-            onay_btn = st.button(f"Fotoğrafı Onayla: {sehir['sehir']}", key=f"onay_{sehir['sehir']}")
-            if onay_btn:
-                sehir["onay"] = True
-                onaylanan_gorevler.append(sehir['sehir'])
-                st.success(f"{sehir['sehir']} görevi onaylandı!")
-
-if onaylanan_gorevler:
-    st.write("Onaylanan Şehirler:", ", ".join(onaylanan_gorevler))
-    # Sonraki şehire yönlendirme
-    for sehir in onaylanan_gorevler:
-        st.write(f"Yönlendirme: {sehir} sonrası bir sonraki şehire gidiniz.")
-
-# Harita Oluşturma
-st.subheader("🗺️ Aktif Ekiplerin Haritası")
-if st.session_state.baslangic_konum:
-    baslangic = st.session_state.baslangic_konum
-    harita = folium.Map(location=[baslangic["lat"], baslangic["lng"]], zoom_start=6)
-    folium.Marker([baslangic["lat"], baslangic["lng"]], popup="Başlangıç", icon=folium.Icon(color="blue")).add_to(harita)
-
-    ekip = st.session_state.ekipler[st.session_state.aktif_ekip]
-    sehirler = ekip["visited_cities"]
-    if siralama_tipi == "Önem Derecesi":
-        sehirler = sorted(sehirler, key=lambda x: x["onem"], reverse=True)
-    else:
-        sehirler = sorted(sehirler, key=lambda x: haversine(
-            (baslangic["lat"], baslangic["lng"]),
-            (x["konum"]["lat"], x["konum"]["lng"])
-        ))
-
-    for i, sehir in enumerate(sehirler, 1):
-        lat, lng = sehir["konum"]["lat"], sehir["konum"]["lng"]
-        folium.Marker(
-            [lat, lng],
-            popup=f"{i}. {sehir['sehir']} (Onem: {sehir['onem']})\nTarih: {sehir['tarih']}",
-            icon=folium.DivIcon(html=f"<div style='font-size: 12pt; color: red'>{i}</div>")
-        ).add_to(harita)
-        folium.PolyLine([(baslangic["lat"], baslangic["lng"]), (lat, lng)], color="green").add_to(harita)
-        baslangic = sehir["konum"]
-
-    st_folium(harita, width=700)
